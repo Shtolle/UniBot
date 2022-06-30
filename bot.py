@@ -252,7 +252,7 @@ async def set_link(message: types.Message, state:FSMContext):
 
 @dp.message_handler( content_types=['text'], state=YtDownload.quality  )
 async def set_link(message: types.Message, state:FSMContext):
-    if message.text == ("144" or "240" or "360" or "720"):
+    if message.text == "144" or message.text == "240" or message.text == "360" or message.text == "720":
         async with state.proxy() as data:
             data["quality"] = message.text 
         data = await state.get_data()
