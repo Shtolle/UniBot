@@ -1,16 +1,13 @@
 from config import TOKEN
 
-import logging
+
 # from qrtools.qrtools import QR
 
 
 from aiogram import Bot, Dispatcher, executor, types
-from aiogram.types import ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
-from PIL import Image 
-from pyzbar.pyzbar import decode
-import numpy as np
 from pytube import YouTube
 
 from urllib import request
@@ -52,7 +49,7 @@ quality360 = KeyboardButton("360")
 quality720 = KeyboardButton("720")
 youtubeBtn = KeyboardButton("/youtube")
 qrCodeBtn = KeyboardButton("/qrCode")
-closeBtn = KeyboardButton("/close")
+closeBtn = KeyboardButton("close")
 decodeBtn = KeyboardButton("/encode")
 encodeBtn = KeyboardButton("/decode")
 
@@ -74,8 +71,6 @@ async def process_hello(message: types.Message):
 async def yt_video_download(message,link, format, quality):
     name = time.time()
     try:
-        m =  link.find("https://youtu.be/")
-        print(m)
         if link.find("https://www.youtube.com/watch") != -1 or link.find("https://youtu.be/") != -1 :
             if format =="MP4":
                 await bot.send_message(message.from_user.id,"Trying to access...", reply_markup=actionKbd )
@@ -191,20 +186,23 @@ async def process_qrEnc(message: types.Message):
 
 @dp.message_handler( content_types=['text'], state=QrCode.text  )
 async def create_qr(message: types.Message, state:FSMContext):
-    try:
-        await bot.send_message(message.from_user.id, "Generating...")
-        img = qrcode.make(message.text)
-        img.save(f"Photos/{message.text}.jpg")
-        await bot.send_message(message.from_user.id, "Sending...")
-        files={'photo': open(f'Photos/{message.text}.jpg','rb')}
-        values={'chat_id' : message.chat.id}
-        requests.post(f"https://api.telegram.org/bot{TOKEN}/sendPhoto", files=files, data=values)
+    if message.text != "close":
+        try:
+            await bot.send_message(message.from_user.id, "Generating...")
+            img = qrcode.make(message.text)
+            img.save(f"Photos/{message.text}.jpg")
+            await bot.send_message(message.from_user.id, "Sending...")
+            files={'photo': open(f'Photos/{message.text}.jpg','rb')}
+            values={'chat_id' : message.chat.id}
+            requests.post(f"https://api.telegram.org/bot{TOKEN}/sendPhoto", files=files, data=values)
+            await state.finish()
+        except Exception:
+            print(Exception)
+            await bot.send_message(message.from_user.id, "Something went wrong")
+            pass
+    else :
         await state.finish()
-    except Exception:
-        print(Exception)
-        await bot.send_message(message.from_user.id, "Something went wrong")
-        pass
-
+        await bot.send_message(message.from_user.id, "How can I help?", reply_markup=actionKbd)
 
 
 @dp.message_handler(commands=['youtube'], state=None)
@@ -222,35 +220,53 @@ async def close_kbrd(message: types.Message):
 
 @dp.message_handler( content_types=['text'], state=YtDownload.link  )
 async def set_link(message: types.Message, state:FSMContext):
-    async with state.proxy() as data:
-        data["link"] = message.text 
-    await YtDownload.next()
-    await bot.send_message(message.from_user.id,"Choose between MP3 and MP4" , reply_markup = formatKbd)
+    if message.text.find("https://www.youtube.com/watch" or "https://youtu.be/") != -1:
+        async with state.proxy() as data:
+            data["link"] = message.text 
+        await YtDownload.next()
+        await bot.send_message(message.from_user.id,"Choose between MP3 and MP4" , reply_markup = formatKbd)
+    elif message.text=="close":
+        await state.finish()
+        await bot.send_message(message.from_user.id, "How can I help?", reply_markup=actionKbd)
+    else:
+        await bot.send_message(message.from_user.id,"Please provide a valid YouTube link")
+
 
 @dp.message_handler( content_types=['text'], state=YtDownload.format  )
 async def set_link(message: types.Message, state:FSMContext):
-    async with state.proxy() as data:
-        data["format"] = message.text 
-    await YtDownload.next()
-    await bot.send_message(message.from_user.id,"Choose a video quality" , reply_markup = qualityKbd)
+    if message.text == "MP3" or message.text =="MP4" :
+        async with state.proxy() as data:
+            data["format"] = message.text 
+        await YtDownload.next()
+        await bot.send_message(message.from_user.id,"Choose a video quality" , reply_markup = qualityKbd)
+    elif message.text=="close":
+            await state.finish()
+            await bot.send_message(message.from_user.id, "How can I help?", reply_markup=actionKbd)
+    else :
+        await bot.send_message(message.from_user.id,"Please provide a valid format (MP3 or MP4)")
+
+    @dp.message_handler( content_types=['text']  )
+    async def close(message: types.Message ):
+        if message.text == "close":
+            await bot.send_message(message.from_user.id, "How can I help?", reply_markup=actionKbd)
 
 @dp.message_handler( content_types=['text'], state=YtDownload.quality  )
 async def set_link(message: types.Message, state:FSMContext):
-    async with state.proxy() as data:
-        data["quality"] = message.text 
-    data = await state.get_data()
-    quality = data.get("quality")
-    format = data.get("format")
-    link = data.get("link")
-    await yt_video_download(message,link, format, quality)
-    await state.finish()
+    if message.text == ("144" or "240" or "360" or "720"):
+        async with state.proxy() as data:
+            data["quality"] = message.text 
+        data = await state.get_data()
+        quality = data.get("quality")
+        format = data.get("format")
+        link = data.get("link")
+        await yt_video_download(message,link, format, quality)
+        await state.finish()
+    elif message.text=="close":
+        await state.finish()
+        await bot.send_message(message.from_user.id, "How can I help?", reply_markup=actionKbd)
+    else :
+     await bot.send_message(message.from_user.id,"Please provide a valid video quality (144/240/360/720)")
 
-@dp.message_handler( content_types=['text'] )
-async def set_link(message: types.Message):
-    if message.text.find("https://www.youtube.com/watch") != -1:
-        await yt_video_download(message,message.text, format="MP4", quality="360")
-    else:
-        await bot.send_message(message.from_user.id,"How can i help?" , reply_markup = actionKbd)
 
 @dp.message_handler( content_types=['photo'] )
 async def load_photo(message: types.Message):
